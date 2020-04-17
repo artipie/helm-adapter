@@ -10,6 +10,8 @@
 
 ## Helm repository adapter.
 
+General information about chart repository is [here](https://helm.sh/docs/topics/chart_repository/).
+
 Helm Registry stores helm charts in a hierarchy storage structure and provides a function to orchestrate charts form existed charts. The structure is:
 ```
 |- space
