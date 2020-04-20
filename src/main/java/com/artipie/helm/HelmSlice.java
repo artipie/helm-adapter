@@ -24,12 +24,14 @@
 
 package com.artipie.helm;
 
+import com.artipie.asto.Storage;
 import com.artipie.http.Response;
 import com.artipie.http.Slice;
-import com.artipie.http.rs.RsStatus;
-import io.reactivex.Flowable;
+import com.artipie.http.rq.RqMethod;
+import com.artipie.http.rt.RtRule;
+import com.artipie.http.rt.SliceRoute;
+import com.artipie.http.slice.SliceDownload;
 import java.nio.ByteBuffer;
-import java.util.HashSet;
 import java.util.Map;
 import org.reactivestreams.Publisher;
 
@@ -39,15 +41,33 @@ import org.reactivestreams.Publisher;
  * @since 0.1
  */
 public final class HelmSlice implements Slice {
+
+    /**
+     * Route.
+     *
+     * For GET requests we just need to serve files.
+     */
+    private final SliceRoute route;
+
+    /**
+     * Ctor.
+     *
+     * @param storage Storage for Helm.
+     */
+    public HelmSlice(final Storage storage) {
+        this.route = new SliceRoute(
+            new SliceRoute.Path(
+                new RtRule.ByMethod(RqMethod.GET),
+                new SliceDownload(storage)
+            )
+        );
+    }
+
     @Override
     public Response response(
         final String line,
         final Iterable<Map.Entry<String, String>> headers,
         final Publisher<ByteBuffer> body) {
-        return connection -> connection.accept(
-            RsStatus.NOT_IMPLEMENTED,
-            new HashSet<>(),
-            Flowable.empty()
-        );
+        return this.route.response(line, headers, body);
     }
 }
