@@ -24,7 +24,11 @@
 
 package com.artipie.helm;
 
+import com.artipie.asto.Content;
+import com.artipie.asto.Storage;
+import com.artipie.asto.memory.InMemoryStorage;
 import com.artipie.http.rs.RsStatus;
+import com.artipie.http.slice.KeyFromPath;
 import com.artipie.vertx.VertxSliceServer;
 import io.vertx.reactivex.core.Vertx;
 import io.vertx.reactivex.core.buffer.Buffer;
@@ -35,28 +39,34 @@ import org.hamcrest.core.IsEqual;
 import org.junit.jupiter.api.Test;
 
 /**
- * HelmCommonITCase.
+ * HelmGetITCase.
  *
  * @since 0.1
  */
-public class HelmCommonITCase {
+public final class HelmGetITCase {
 
     @Test
-    public void notImplemented() throws IOException {
+    void notImplemented() throws IOException {
         final Vertx vertx = Vertx.vertx();
+        final Storage storage = new InMemoryStorage();
+        final String path = "/charts/index.yml";
+        storage.save(
+            new KeyFromPath(path),
+            new Content.From("content".getBytes())
+        );
         final VertxSliceServer server = new VertxSliceServer(
             vertx,
-            new HelmSlice()
+            new HelmSlice(storage)
         );
         final WebClient web = WebClient.create(vertx);
         final int port = server.start();
-        final int code = web.post(port, "localhost", "/api/v1/charts")
+        final int code = web.get(port, "localhost", path)
             .rxSendBuffer(Buffer.buffer())
             .blockingGet()
             .statusCode();
         MatcherAssert.assertThat(
             code,
-            new IsEqual<>(Integer.parseInt(RsStatus.NOT_IMPLEMENTED.code()))
+            new IsEqual<>(Integer.parseInt(RsStatus.OK.code()))
         );
         web.close();
         server.close();
