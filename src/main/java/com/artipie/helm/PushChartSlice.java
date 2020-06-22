@@ -42,8 +42,6 @@ import org.reactivestreams.Publisher;
 
 /**
  * A Slice which accept archived charts, save them into a storage and trigger index.yml reindexing.
- * @todo #13:30min Create an integration test
- *  We need an integration test for this class with described logic of upload from client side
  * @since 0.2
  * @checkstyle MethodBodyCommentsCheck (500 lines)
  */
