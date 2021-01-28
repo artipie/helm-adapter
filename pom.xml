@@ -33,7 +33,7 @@ SOFTWARE.
     <vertx.version>3.8.4</vertx.version>
   </properties>
   <artifactId>helm-adapter</artifactId>
-  <version>1.0-SNAPSHOT</version>
+  <version>0.2</version>
   <name>helm-adapter</name>
   <url>https://github.com/artipie/helm-adapter</url>
   <licenses>
