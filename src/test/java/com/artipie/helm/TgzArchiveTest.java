@@ -30,7 +30,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collections;
+import java.util.Optional;
 import org.hamcrest.MatcherAssert;
+import org.hamcrest.Matchers;
 import org.hamcrest.core.IsEqual;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -90,5 +93,24 @@ public final class TgzArchiveTest {
             )
         );
         vertx.close();
+    }
+
+    @Test
+    void hasCorrectMetadata() throws IOException {
+        MatcherAssert.assertThat(
+            new TgzArchive(
+                Files.readAllBytes(Paths.get("./src/test/resources/tomcat-0.4.1.tgz"))
+            ).metadata(Optional.empty()),
+            Matchers.allOf(
+                Matchers.hasEntry(
+                    Matchers.is("urls"),
+                    Matchers.is(Collections.singletonList("tomcat-0.4.1.tgz"))
+                ),
+                Matchers.hasEntry(
+                    Matchers.is("digest"),
+                    Matchers.isA(String.class)
+                )
+            )
+        );
     }
 }

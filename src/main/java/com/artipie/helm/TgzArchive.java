@@ -36,6 +36,9 @@ import java.io.InputStreamReader;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import org.apache.commons.codec.digest.DigestUtils;
@@ -92,6 +95,30 @@ public final class TgzArchive implements Content {
     public String name() {
         final ChartYaml chart = this.chartYaml();
         return String.format("%s-%s.tgz", chart.name(), chart.version());
+    }
+
+    /**
+     * Obtain metadata for Index.
+     * @param baseurl Base url.
+     * @return Metadata of archive.
+     */
+    public Map<String, Object> metadata(final Optional<String> baseurl) {
+        final Map<String, Object> meta = new HashMap<>();
+        meta.put(
+            "urls",
+            new ArrayList<>(
+                Collections.singletonList(
+                    String.format(
+                        "%s%s",
+                        baseurl.orElse(""),
+                        this.name()
+                    )
+                )
+            )
+        );
+        meta.put("digest", this.digest());
+        meta.putAll(this.chartYaml().fields());
+        return meta;
     }
 
     /**
