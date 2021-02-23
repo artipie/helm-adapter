@@ -43,6 +43,9 @@ import org.junit.jupiter.api.Test;
  * Test case for {@link IndexByDirectory}.
  * @since 0.2
  * @checkstyle ClassDataAbstractionCouplingCheck (500 lines)
+ * @todo #32:30min Create a unit test for urls field
+ *  One of the fields Index.yaml require is "urls" field. The test should make verify
+ *  that field has been generated correctly.
  */
 @SuppressWarnings("PMD.AvoidDuplicateLiterals")
 final class IndexByDirectoryTest {
