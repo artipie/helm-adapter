@@ -86,12 +86,6 @@ final class IndexByDirectoryTest {
             mapping.byChart("ark").size(),
             new IsEqual<>(2)
         );
-        MatcherAssert.assertThat(
-            "The length of content must be correct",
-            mapping.toString(),
-            // @checkstyle MagicNumberCheck (1 lines)
-            Matchers.hasLength(1586)
-        );
     }
 
     @Test
