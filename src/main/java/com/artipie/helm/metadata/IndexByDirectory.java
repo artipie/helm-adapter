@@ -27,18 +27,13 @@ import com.artipie.asto.Content;
 import com.artipie.asto.Key;
 import com.artipie.asto.Storage;
 import com.artipie.asto.ext.PublisherAs;
-import com.artipie.helm.ChartYaml;
 import com.artipie.helm.TgzArchive;
-import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 /**
  * Generate `index.yaml` file  given a directory containing packaged charts.
@@ -59,7 +54,7 @@ public class IndexByDirectory {
     /**
      * Base url.
      */
-    private final String baseurl;
+    private final Optional<String> baseurl;
 
     /**
      * Ctor.
@@ -67,68 +62,68 @@ public class IndexByDirectory {
      * @param directory Directory from which packaged charts are taken
      * @param baseurl Absolute url to the charts
      */
-    public IndexByDirectory(final Storage storage, final Key directory,
-        final Optional<String> baseurl) {
+    public IndexByDirectory(
+        final Storage storage,
+        final Key directory,
+        final Optional<String> baseurl
+    ) {
         this.storage = storage;
         this.directory = directory;
-        this.baseurl = baseurl.orElse("");
+        this.baseurl = baseurl;
     }
 
     /**
      * Obtains generated `index.yaml`.
-     * @return Bytes of generated `index.yaml`, empty in case of absence of packaged charts.
+     * @return Bytes of generated `index.yaml`,
+     *  empty in case of absence of packaged charts.
      */
     public CompletionStage<Optional<Content>> value() {
-        final Map<String, List<Object>> entries = new ConcurrentHashMap<>();
-        return this.storage.list(this.directory).thenCompose(
-            keys -> CompletableFuture.allOf(
-                keys.stream()
-                    .map(key -> key.string().substring(this.directory.string().length() + 1))
-                    .map(key -> key.split("/"))
-                    .filter(parts -> parts.length == 1 && parts[0].endsWith(".tgz"))
-                    .map(parts -> parts[0])
-                    .map(
-                        key -> this.storage.value(
-                            new Key.From(this.directory, key)
-                        ).thenApply(PublisherAs::new)
-                        .thenCompose(PublisherAs::bytes)
-                        .thenApply(TgzArchive::new)
-                        .thenAccept(tgz -> this.addEntry(tgz, entries))
-                    ).toArray(CompletableFuture[]::new)
-            ).thenApply(nothing -> new IndexYamlMapping())
-            .thenApply(index -> index.addEntries(entries))
-            .thenApply(IndexYamlMapping::toContent)
-        );
+        return this.storage
+            .list(this.directory)
+            .thenCompose(
+                keys -> {
+                    final IndexYamlMapping index = new IndexYamlMapping();
+                    return CompletableFuture.allOf(
+                        keys.stream()
+                            .map(
+                                key -> key
+                                    .string()
+                                    .substring(this.directory.string().length() + 1)
+                            )
+                            .map(key -> key.split("/"))
+                            .filter(parts -> parts.length == 1 && parts[0].endsWith(".tgz"))
+                            .map(parts -> parts[0])
+                            .map(this.extractMetadata(index))
+                            .toArray(CompletableFuture[]::new)
+                    ).thenApply(nothing -> index);
+                }
+            )
+            .thenApply(IndexYamlMapping::toContent);
     }
 
     /**
-     * Add entry to the existing entries.
-     * @param tgz Tgz archive
-     * @param entries Existing entries
-     * @todo #90:60min Extract logic for creating a new version of chart for `index.yaml`.
-     *  In this method and in `IndexYaml#update` the same logic for generating
-     *  additional fields is used. It is necessary to extract this logic or
-     *  to redesign `IndexYaml` class by removing interaction with storage
-     *  or something else.
+     * Add metadata to the index.
+     * @param index Index to be updated.
+     * @return A function.
      */
-    private void addEntry(final TgzArchive tgz, final Map<String, List<Object>> entries) {
-        final ChartYaml chart = tgz.chartYaml();
-        final Map<String, Object> newvers = new HashMap<>(chart.fields());
-        newvers.put("digest", tgz.digest());
-        newvers.put(
-            "urls",
-            new ArrayList<>(
-                Collections.singleton(String.format("%s%s", this.baseurl, tgz.name()))
-            )
-        );
-        newvers.put("created", ZonedDateTime.now().format(IndexYaml.TIME_FORMATTER));
-        synchronized (entries) {
-            final String name = chart.name();
-            if (entries.containsKey(name)) {
-                entries.get(name).add(newvers);
-            } else {
-                entries.put(name, new ArrayList<>(Collections.singletonList(newvers)));
-            }
-        }
+    private Function<String, CompletableFuture<Void>> extractMetadata(
+        final IndexYamlMapping index
+    ) {
+        return key ->
+            this.storage.value(new Key.From(this.directory, key))
+                .thenApply(PublisherAs::new)
+                .thenCompose(PublisherAs::bytes)
+                .thenApply(TgzArchive::new)
+                .thenAccept(
+                    tgz -> index.addChartVersions(
+                        tgz.chartYaml().name(),
+                        new ArrayList<>(
+                            Collections.singletonList(
+                                tgz.metadata(this.baseurl)
+                            )
+                        )
+                    )
+                );
     }
+
 }
