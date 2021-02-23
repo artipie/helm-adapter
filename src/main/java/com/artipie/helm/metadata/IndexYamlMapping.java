@@ -35,6 +35,8 @@ import org.yaml.snakeyaml.Yaml;
 
 /**
  * Mapping for content from index.yaml file.
+ * @todo #94:30min Residing this class in order to remove
+ *  synchronized block, preferring keeping it immutable.
  * @since 0.2
  */
 @SuppressWarnings("unchecked")
@@ -114,35 +116,30 @@ public final class IndexYamlMapping {
      * @param name Chart name
      * @param versions Collection with mapping for different versions of specified chart
      */
-    public void addChartVersions(final String name, final List<Map<String, Object>> versions) {
-        final Map<String, Object> entr = this.entries();
-        versions.forEach(vers -> vers.put("created", IndexYamlMapping.now()));
-        if (entr.containsKey(name)) {
-            final List<Map<String, Object>> existed = this.byChart(name);
-            for (final Map<String, Object> vers : versions) {
-                final Optional<Map<String, Object>> opt;
-                opt = this.byChartAndVersion(name, (String) vers.get(IndexYamlMapping.VRSN));
-                if (opt.isPresent()) {
-                    existed.removeIf(
-                        chart -> chart.get(IndexYamlMapping.VRSN)
-                            .equals(opt.get().get(IndexYamlMapping.VRSN))
-                    );
+    public void addChartVersions(
+        final String name,
+        final List<Map<String, Object>> versions
+    ) {
+        synchronized (this.mapping) {
+            final Map<String, Object> entr = this.entries();
+            versions.forEach(vers -> vers.put("created", IndexYamlMapping.now()));
+            if (entr.containsKey(name)) {
+                final List<Map<String, Object>> existed = this.byChart(name);
+                for (final Map<String, Object> vers : versions) {
+                    final Optional<Map<String, Object>> opt;
+                    opt = this.byChartAndVersion(name, (String) vers.get(IndexYamlMapping.VRSN));
+                    if (opt.isPresent()) {
+                        existed.removeIf(
+                            chart -> chart.get(IndexYamlMapping.VRSN)
+                                .equals(opt.get().get(IndexYamlMapping.VRSN))
+                        );
+                    }
+                    existed.add(vers);
                 }
-                existed.add(vers);
+            } else {
+                entr.put(name, versions);
             }
-        } else {
-            entr.put(name, versions);
         }
-    }
-
-    /**
-     * Add entries to the existing mapping.
-     * @param entries Entries that should be added
-     * @return Itself.
-     */
-    public IndexYamlMapping addEntries(final Map<String, List<Object>> entries) {
-        this.mapping.put(IndexYamlMapping.ENTRS, entries);
-        return this;
     }
 
     /**
