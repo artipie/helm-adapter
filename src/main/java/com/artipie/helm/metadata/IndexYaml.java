@@ -30,7 +30,6 @@ import com.artipie.asto.Remaining;
 import com.artipie.asto.Storage;
 import com.artipie.asto.rx.RxStorage;
 import com.artipie.asto.rx.RxStorageWrapper;
-import com.artipie.helm.ChartYaml;
 import com.artipie.helm.TgzArchive;
 import io.reactivex.Completable;
 import io.reactivex.Single;
@@ -38,11 +37,11 @@ import java.io.FileNotFoundException;
 import java.nio.charset.StandardCharsets;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import org.yaml.snakeyaml.Yaml;
 
@@ -88,10 +87,7 @@ public final class IndexYaml {
         return this.indexFromStrg(
             Single.just(IndexYaml.empty())
         ).map(
-            idx -> {
-                IndexYaml.update(idx, arch);
-                return idx;
-            }
+            idx -> IndexYaml.update(idx, arch)
         ).flatMapCompletable(this::indexToStorage);
     }
 
@@ -165,28 +161,28 @@ public final class IndexYaml {
      * Perform an update.
      * @param index The index yaml mappings.
      * @param tgz The archive.
+     * @return Updated map.
      */
-    private static void update(final Map<String, Object> index, final TgzArchive tgz) {
-        final ChartYaml chart = tgz.chartYaml();
-        final IndexYamlMapping mapping = new IndexYamlMapping(index);
-        final String name = chart.name();
-        final List<Map<String, Object>> versions = mapping.byChart(name);
-        if (versions.stream().noneMatch(map -> map.get("version").equals(chart.version()))) {
-            final Map<String, Object> newver = new HashMap<>();
-            newver.put("created", ZonedDateTime.now().format(IndexYaml.TIME_FORMATTER));
-            newver.put(
-                "urls",
-                new ArrayList<>(
-                    Collections.singleton(tgz.name())
+    private static Map<String, Object> update(
+        final Map<String, Object> index,
+        final TgzArchive tgz
+    ) {
+        final Map<String, Object> copy = new HashMap<>(index);
+        final IndexYamlMapping yaml = new IndexYamlMapping(copy);
+        if (
+            !yaml
+                .byChartAndVersion(
+                    tgz.chartYaml().name(),
+                    tgz.chartYaml().version()
                 )
+                .isPresent()
+        ) {
+            yaml.addChartVersions(
+                tgz.chartYaml().name(),
+                Collections.singletonList(tgz.metadata(Optional.empty()))
             );
-            newver.put("digest", tgz.digest());
-            newver.putAll(chart.fields());
-            // @todo #32:30min Create a unit test for urls field
-            //  One of the fields Index.yaml require is "urls" field. The test should make verify
-            //  that field has been generated correctly.
-            versions.add(newver);
         }
+        return copy;
     }
 
     /**
