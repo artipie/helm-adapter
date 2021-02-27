@@ -100,6 +100,7 @@ public final class TgzArchiveTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void hasCorrectMetadata() throws IOException {
         MatcherAssert.assertThat(
             new TgzArchive(
