@@ -90,7 +90,8 @@ public final class TgzArchive implements Content {
     }
 
     /**
-     * Obtain metadata for Index.
+     * Metadata of archive.
+     *
      * @param baseurl Base url.
      * @return Metadata of archive.
      */
