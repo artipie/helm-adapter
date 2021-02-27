@@ -25,6 +25,7 @@ package com.artipie.helm;
 
 import com.artipie.asto.Storage;
 import com.artipie.asto.fs.FileStorage;
+import com.artipie.asto.test.TestResource;
 import io.vertx.reactivex.core.Vertx;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -102,7 +103,7 @@ public final class TgzArchiveTest {
     void hasCorrectMetadata() throws IOException {
         MatcherAssert.assertThat(
             new TgzArchive(
-                Files.readAllBytes(Paths.get("./src/test/resources/tomcat-0.4.1.tgz"))
+                new TestResource("./src/test/resources/tomcat-0.4.1.tgz").asBytes()
             ).metadata(Optional.empty()),
             new AllOf<>(
                 new ListOf<>(
