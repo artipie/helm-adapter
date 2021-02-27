@@ -30,6 +30,7 @@ import com.artipie.asto.Remaining;
 import com.artipie.asto.Storage;
 import com.artipie.asto.rx.RxStorage;
 import com.artipie.asto.rx.RxStorageWrapper;
+import com.artipie.helm.ChartYaml;
 import com.artipie.helm.TgzArchive;
 import io.reactivex.Completable;
 import io.reactivex.Single;
@@ -169,16 +170,17 @@ public final class IndexYaml {
     ) {
         final Map<String, Object> copy = new HashMap<>(index);
         final IndexYamlMapping yaml = new IndexYamlMapping(copy);
+        final ChartYaml chart = tgz.chartYaml();
         if (
             !yaml
                 .byChartAndVersion(
-                    tgz.chartYaml().name(),
-                    tgz.chartYaml().version()
+                    chart.name(),
+                    chart.version()
                 )
                 .isPresent()
         ) {
             yaml.addChartVersions(
-                tgz.chartYaml().name(),
+                chart.name(),
                 Collections.singletonList(tgz.metadata(Optional.empty()))
             );
         }
