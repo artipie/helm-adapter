@@ -55,9 +55,7 @@ public final class TgzArchiveTest {
     public void nameIdentifiedCorrectly() throws IOException {
         MatcherAssert.assertThat(
             new TgzArchive(
-                Files.readAllBytes(
-                    Paths.get("./src/test/resources/tomcat-0.4.1.tgz")
-                )
+                new TestResource("tomcat-0.4.1.tgz").asBytes()
             ).name(),
             new IsEqual<>("tomcat-0.4.1.tgz")
         );
@@ -65,12 +63,14 @@ public final class TgzArchiveTest {
 
     @Test
     public void sizeHasCorrectValue() throws IOException {
-        final Path file = Paths.get("./src/test/resources/tomcat-0.4.1.tgz");
+        final TestResource file = new TestResource("tomcat-0.4.1.tgz");
         MatcherAssert.assertThat(
             new TgzArchive(
-                Files.readAllBytes(file)
+                file.asBytes()
             ).size().get(),
-            new IsEqual<>(Files.size(file))
+            new IsEqual<>(
+                Files.size(file.asPath())
+            )
         );
     }
 
@@ -81,19 +81,16 @@ public final class TgzArchiveTest {
         //  Currently FileStorage is used in this test, but we need to refactor it to use InMemory
         //  storage.
         final Storage storage = new FileStorage(tmp);
+        final TestResource file = new TestResource("tomcat-0.4.1.tgz");
         new TgzArchive(
-            Files.readAllBytes(
-                Paths.get("./src/test/resources/tomcat-0.4.1.tgz")
-            )
+            file.asBytes()
         ).save(storage).blockingGet();
         MatcherAssert.assertThat(
             Files.readAllBytes(
                 Paths.get(tmp.toAbsolutePath().toString(), "tomcat-0.4.1.tgz")
             ),
             new IsEqual<>(
-                Files.readAllBytes(
-                    Paths.get("./src/test/resources/tomcat-0.4.1.tgz")
-                )
+                file.asBytes()
             )
         );
         vertx.close();
@@ -104,7 +101,7 @@ public final class TgzArchiveTest {
     void hasCorrectMetadata() {
         MatcherAssert.assertThat(
             new TgzArchive(
-                new TestResource("./src/test/resources/tomcat-0.4.1.tgz").asBytes()
+                new TestResource("tomcat-0.4.1.tgz").asBytes()
             ).metadata(Optional.empty()),
             new AllOf<>(
                 new ListOf<>(
