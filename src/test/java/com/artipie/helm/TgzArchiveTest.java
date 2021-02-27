@@ -32,9 +32,12 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.Optional;
+import org.cactoos.list.ListOf;
 import org.hamcrest.MatcherAssert;
-import org.hamcrest.Matchers;
+import org.hamcrest.collection.IsMapContaining;
+import org.hamcrest.core.AllOf;
 import org.hamcrest.core.IsEqual;
+import org.hamcrest.core.IsInstanceOf;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -101,14 +104,16 @@ public final class TgzArchiveTest {
             new TgzArchive(
                 Files.readAllBytes(Paths.get("./src/test/resources/tomcat-0.4.1.tgz"))
             ).metadata(Optional.empty()),
-            Matchers.allOf(
-                Matchers.hasEntry(
-                    Matchers.is("urls"),
-                    Matchers.is(Collections.singletonList("tomcat-0.4.1.tgz"))
-                ),
-                Matchers.hasEntry(
-                    Matchers.is("digest"),
-                    Matchers.isA(String.class)
+            new AllOf<>(
+                new ListOf<>(
+                    new IsMapContaining<>(
+                        new IsEqual<>("urls"),
+                        new IsEqual<>(Collections.singletonList("tomcat-0.4.1.tgz"))
+                    ),
+                    new IsMapContaining<>(
+                        new IsEqual<>("digest"),
+                        new IsInstanceOf(String.class)
+                    )
                 )
             )
         );
