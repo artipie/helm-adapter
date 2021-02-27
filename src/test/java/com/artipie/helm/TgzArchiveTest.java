@@ -101,7 +101,7 @@ public final class TgzArchiveTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void hasCorrectMetadata() throws IOException {
+    void hasCorrectMetadata() {
         MatcherAssert.assertThat(
             new TgzArchive(
                 new TestResource("./src/test/resources/tomcat-0.4.1.tgz").asBytes()
