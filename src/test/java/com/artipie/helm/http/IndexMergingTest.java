@@ -46,12 +46,12 @@ final class IndexMergingTest {
 
     @BeforeEach
     void setUp() {
-        this.source = this.index("merge/source/index.yaml");
+        this.source = this.index("merge/source.yaml");
     }
 
     @Test
     void mergedFileContainsRequiredCharts() {
-        final IndexYamlMapping target = this.index("merge/output/index.yaml");
+        final IndexYamlMapping target = this.index("merge/output.yaml");
         MatcherAssert.assertThat(
             this.mergedIndex().entries().keySet(),
             Matchers.containsInAnyOrder(target.entries().keySet().toArray())
@@ -61,7 +61,7 @@ final class IndexMergingTest {
     @Test
     void tomcatContainsBothRequiredVersions() {
         final String chart = "tomcat";
-        final IndexYamlMapping target = this.index("merge/output/index.yaml");
+        final IndexYamlMapping target = this.index("merge/output.yaml");
         MatcherAssert.assertThat(
             this.mergedIndex().byChart(chart).stream()
                 .map(entry -> (String) entry.get("version"))
@@ -96,7 +96,7 @@ final class IndexMergingTest {
         final String chart = "tomcat";
         final String version = "0.1.0";
         final String descr = "description";
-        final IndexYamlMapping target = this.index("merge/output/index.yaml");
+        final IndexYamlMapping target = this.index("merge/output.yaml");
         MatcherAssert.assertThat(
             this.mergedIndex()
                 .byChartAndVersion(chart, version)
@@ -117,7 +117,7 @@ final class IndexMergingTest {
     }
 
     private IndexYamlMapping mergedIndex() {
-        final IndexYamlMapping remote = this.index("merge/remote/index.yaml");
+        final IndexYamlMapping remote = this.index("merge/remote.yaml");
         return new IndexYamlMapping(
             new PublisherAs(
                 new IndexMergingSlice.IndexMerging(this.source.toContent().get())

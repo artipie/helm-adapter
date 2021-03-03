@@ -96,9 +96,9 @@ public final class IndexMergingSlice implements Slice {
                                 target -> IndexMergingSlice.checkAndMerge(target, yaml, temp)
                             );
                         } else {
-                            res = CompletableFuture.completedFuture(
-                                new RsWithStatus(RsStatus.BAD_REQUEST)
-                            );
+                            res = temp.list(yaml)
+                                .thenCompose(lst -> IndexMergingSlice.remove(temp, lst))
+                                .thenApply(ignore -> new RsWithStatus(RsStatus.BAD_REQUEST));
                         }
                         return res;
                     }
@@ -128,6 +128,7 @@ public final class IndexMergingSlice implements Slice {
                                 IndexMerging::mergeWith
                             )
                             .thenCompose(Function.identity())
+                            .thenCompose(content -> storage.save(meta, content))
                             .thenCompose(ignore -> substrg.list(meta))
                             .thenCompose(
                                 lst -> IndexMergingSlice.remove(substrg, lst)
