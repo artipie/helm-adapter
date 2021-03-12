@@ -21,10 +21,11 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.artipie.helm.metadata;
+package com.artipie.helm.http;
 
 import com.artipie.asto.ext.PublisherAs;
 import com.artipie.asto.test.TestResource;
+import com.artipie.helm.metadata.IndexYamlMapping;
 import java.util.stream.Collectors;
 import org.hamcrest.MatcherAssert;
 import org.hamcrest.Matchers;
@@ -33,7 +34,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * Test cases for {@link IndexMerging}.
+ * Test cases for {@link IndexMergingSlice.IndexMerging}.
  * @since 0.2
  */
 @SuppressWarnings("PMD.AvoidDuplicateLiterals")
@@ -45,12 +46,12 @@ final class IndexMergingTest {
 
     @BeforeEach
     void setUp() {
-        this.source = this.index("merge/source/index.yaml");
+        this.source = this.index("merge/source.yaml");
     }
 
     @Test
     void mergedFileContainsRequiredCharts() {
-        final IndexYamlMapping target = this.index("merge/output/index.yaml");
+        final IndexYamlMapping target = this.index("merge/output.yaml");
         MatcherAssert.assertThat(
             this.mergedIndex().entries().keySet(),
             Matchers.containsInAnyOrder(target.entries().keySet().toArray())
@@ -60,7 +61,7 @@ final class IndexMergingTest {
     @Test
     void tomcatContainsBothRequiredVersions() {
         final String chart = "tomcat";
-        final IndexYamlMapping target = this.index("merge/output/index.yaml");
+        final IndexYamlMapping target = this.index("merge/output.yaml");
         MatcherAssert.assertThat(
             this.mergedIndex().byChart(chart).stream()
                 .map(entry -> (String) entry.get("version"))
@@ -95,12 +96,13 @@ final class IndexMergingTest {
         final String chart = "tomcat";
         final String version = "0.1.0";
         final String descr = "description";
+        final IndexYamlMapping target = this.index("merge/output.yaml");
         MatcherAssert.assertThat(
             this.mergedIndex()
                 .byChartAndVersion(chart, version)
                 .get().get(descr),
             new IsEqual<>(
-                this.source.byChartAndVersion(chart, version)
+                target.byChartAndVersion(chart, version)
                     .get().get(descr)
             )
         );
@@ -115,10 +117,10 @@ final class IndexMergingTest {
     }
 
     private IndexYamlMapping mergedIndex() {
-        final IndexYamlMapping remote = this.index("merge/remote/index.yaml");
+        final IndexYamlMapping remote = this.index("merge/remote.yaml");
         return new IndexYamlMapping(
             new PublisherAs(
-                new IndexMerging(this.source)
+                new IndexMergingSlice.IndexMerging(this.source.toContent().get())
                     .mergeWith(remote.toContent().get())
                     .toCompletableFuture().join()
             ).asciiString()
