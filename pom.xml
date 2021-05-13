@@ -64,7 +64,7 @@ SOFTWARE.
     <dependency>
       <groupId>org.yaml</groupId>
       <artifactId>snakeyaml</artifactId>
-      <version>1.26</version>
+      <version>1.28</version>
     </dependency>
     <dependency>
       <groupId>com.artipie</groupId>
