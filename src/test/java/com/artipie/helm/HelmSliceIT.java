@@ -28,6 +28,9 @@ import com.artipie.asto.Key;
 import com.artipie.asto.Storage;
 import com.artipie.asto.blocking.BlockingStorage;
 import com.artipie.asto.memory.InMemoryStorage;
+import com.artipie.asto.test.TestResource;
+import com.artipie.helm.http.HelmSlice;
+import com.artipie.helm.metadata.IndexYamlMapping;
 import com.artipie.http.rs.RsStatus;
 import com.artipie.http.rs.StandardRs;
 import com.artipie.vertx.VertxSliceServer;
@@ -36,12 +39,8 @@ import io.vertx.reactivex.core.Vertx;
 import io.vertx.reactivex.core.buffer.Buffer;
 import io.vertx.reactivex.ext.web.client.WebClient;
 import java.io.File;
-import java.io.IOException;
-import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.awaitility.Awaitility;
@@ -56,7 +55,6 @@ import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.shaded.org.yaml.snakeyaml.Yaml;
 
 /**
  * Push helm chart and ensure if index.yaml is generated properly.
@@ -72,7 +70,7 @@ import org.testcontainers.shaded.org.yaml.snakeyaml.Yaml;
 public class HelmSliceIT {
 
     @Test
-    public void indexYamlIsCorrect(@TempDir final Path tmp) throws IOException, URISyntaxException {
+    public void indexYamlIsCorrect(@TempDir final Path tmp) throws Exception {
         final Vertx vertx = Vertx.vertx();
         final Storage fls = new InMemoryStorage();
         final int port = rndPort();
@@ -81,14 +79,7 @@ public class HelmSliceIT {
             new HelmSlice(fls, String.format("http://localhost:%d/", port)),
             port
         );
-        final byte[] tomcat = Files.readAllBytes(
-            Paths.get(
-                Thread.currentThread()
-                    .getContextClassLoader()
-                    .getResource("tomcat-0.4.1.tgz")
-                    .toURI()
-            )
-        );
+        final byte[] tomcat = new TestResource("tomcat-0.4.1.tgz").asBytes();
         final WebClient web = WebClient.create(vertx);
         try {
             server.start();
@@ -125,8 +116,7 @@ public class HelmSliceIT {
                     tomcatZeroEntry(expected),
                     tomcatZeroEntry(adapter)
                 ).entriesDiffering(),
-                ComposeMatchers.compose(new IsMapWithSize<String, Object>(new IsEqual<>(2)))
-                    .and(new IsMapContaining<>(new IsEqual<>("urls"), new IsAnything<>()))
+                ComposeMatchers.compose(new IsMapWithSize<String, Object>(new IsEqual<>(1)))
                     .and(new IsMapContaining<>(new IsEqual<>("created"), new IsAnything<>()))
             );
         } finally {
@@ -141,13 +131,8 @@ public class HelmSliceIT {
      * @param yaml The index.yaml file passed as string
      * @return The first element in entries->tomcat
      */
-    @SuppressWarnings("unchecked")
     private static Map<String, Object> tomcatZeroEntry(final String yaml) {
-        return (
-            (ArrayList<Map<String, Object>>)
-                ((Map<String, Object>) new Yaml().<Map<String, Object>>load(yaml)
-                    .get("entries")).get("tomcat")
-        ).get(0);
+        return new IndexYamlMapping(yaml).byChart("tomcat").get(0);
     }
 
     /**

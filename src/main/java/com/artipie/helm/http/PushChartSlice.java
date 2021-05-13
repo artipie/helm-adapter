@@ -22,33 +22,39 @@
  * SOFTWARE.
  */
 
-package com.artipie.helm;
+package com.artipie.helm.http;
 
 import com.artipie.asto.Remaining;
 import com.artipie.asto.Storage;
+import com.artipie.helm.TgzArchive;
+import com.artipie.helm.metadata.IndexYaml;
 import com.artipie.http.Response;
 import com.artipie.http.Slice;
 import com.artipie.http.async.AsyncResponse;
+import com.artipie.http.rq.RequestLineFrom;
+import com.artipie.http.rq.RqParams;
 import com.artipie.http.rs.RsStatus;
 import com.artipie.http.rs.RsWithStatus;
 import com.artipie.http.rs.StandardRs;
+import io.reactivex.Completable;
 import io.reactivex.Flowable;
 import io.reactivex.Single;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.reactivestreams.Publisher;
 
 /**
  * A Slice which accept archived charts, save them into a storage and trigger index.yml reindexing.
+ * By default it updates index file after uploading.
+ * @since 0.2
  * @todo #13:30min Create an integration test
  *  We need an integration test for this class with described logic of upload from client side
- * @since 0.2
  * @checkstyle MethodBodyCommentsCheck (500 lines)
  */
-@SuppressWarnings({"PMD.UnusedPrivateField", "PMD.SingularField", "PMD.UnusedFormalParameter"})
-public final class PushChartSlice implements Slice {
+final class PushChartSlice implements Slice {
 
     /**
      * The Storage.
@@ -56,25 +62,37 @@ public final class PushChartSlice implements Slice {
     private final Storage storage;
 
     /**
-     * The base path for urls.
-     */
-    private final String base;
-
-    /**
      * Ctor.
      * @param storage The storage.
-     * @param base The base path of urls field.
      */
-    public PushChartSlice(final Storage storage, final String base) {
+    PushChartSlice(final Storage storage) {
         this.storage = storage;
-        this.base = base;
     }
 
     @Override
-    public Response response(final String line,
+    public Response response(
+        final String line,
         final Iterable<Map.Entry<String, String>> headers,
-        final Publisher<ByteBuffer> body) {
-        return new AsyncResponse(this.response(body));
+        final Publisher<ByteBuffer> body
+    ) {
+        final Optional<String> upd = new RqParams(
+            new RequestLineFrom(line).uri()
+        ).value("updateIndex");
+        return new AsyncResponse(
+            memory(body).flatMapCompletable(
+                tgz -> tgz.save(this.storage).flatMapCompletable(
+                    key -> {
+                        final Completable res;
+                        if (!upd.isPresent() || upd.get().equals("true")) {
+                            res = new IndexYaml(this.storage).update(tgz);
+                        } else {
+                            res = Completable.complete();
+                        }
+                        return res;
+                    }
+                )
+            ).andThen(Single.just(new RsWithStatus(StandardRs.EMPTY, RsStatus.OK)))
+        );
     }
 
     /**
@@ -95,19 +113,6 @@ public final class PushChartSlice implements Slice {
             pos += tocopy.length;
         }
         return bytes;
-    }
-
-    /**
-     * The reactive response.
-     * @param body The body
-     * @return The response
-     */
-    private Single<Response> response(final Publisher<ByteBuffer> body) {
-        return memory(body).flatMapCompletable(
-            arch -> arch.save(this.storage).flatMapCompletable(
-                key -> new IndexYaml(this.storage, this.base).update(arch)
-            )
-        ).andThen(Single.just(new RsWithStatus(StandardRs.EMPTY, RsStatus.OK)));
     }
 
     /**

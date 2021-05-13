@@ -36,6 +36,9 @@ import java.io.InputStreamReader;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import org.apache.commons.codec.digest.DigestUtils;
@@ -57,7 +60,7 @@ import org.reactivestreams.Subscriber;
     "PMD.AvoidBranchingStatementAsLastInLoop",
     "PMD.AssignmentInOperand"
 })
-final class TgzArchive implements Content {
+public final class TgzArchive implements Content {
 
     /**
      * The eight kb.
@@ -73,16 +76,8 @@ final class TgzArchive implements Content {
      * Ctor.
      * @param content The archive content.
      */
-    TgzArchive(final byte[] content) {
+    public TgzArchive(final byte[] content) {
         this.content = content;
-    }
-
-    /**
-     * The digest string.
-     * @return The digest.
-     */
-    public String digest() {
-        return DigestUtils.sha256Hex(this.content);
     }
 
     /**
@@ -91,7 +86,32 @@ final class TgzArchive implements Content {
      */
     public String name() {
         final ChartYaml chart = this.chartYaml();
-        return String.format("%s-%s.tgz", chart.field("name"), chart.field("version"));
+        return String.format("%s-%s.tgz", chart.name(), chart.version());
+    }
+
+    /**
+     * Metadata of archive.
+     *
+     * @param baseurl Base url.
+     * @return Metadata of archive.
+     */
+    public Map<String, Object> metadata(final Optional<String> baseurl) {
+        final Map<String, Object> meta = new HashMap<>();
+        meta.put(
+            "urls",
+            new ArrayList<>(
+                Collections.singletonList(
+                    String.format(
+                        "%s%s",
+                        baseurl.orElse(""),
+                        this.name()
+                    )
+                )
+            )
+        );
+        meta.put("digest", DigestUtils.sha256Hex(this.content));
+        meta.putAll(this.chartYaml().fields());
+        return meta;
     }
 
     /**

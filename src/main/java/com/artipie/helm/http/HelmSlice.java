@@ -21,18 +21,19 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-
-package com.artipie.helm;
+package com.artipie.helm.http;
 
 import com.artipie.asto.Storage;
 import com.artipie.http.Slice;
-import com.artipie.http.auth.Identities;
+import com.artipie.http.auth.Action;
+import com.artipie.http.auth.Authentication;
+import com.artipie.http.auth.BasicAuthSlice;
 import com.artipie.http.auth.Permission;
 import com.artipie.http.auth.Permissions;
-import com.artipie.http.auth.SliceAuth;
 import com.artipie.http.rq.RqMethod;
 import com.artipie.http.rs.RsStatus;
 import com.artipie.http.rs.RsWithStatus;
+import com.artipie.http.rt.ByMethodsRule;
 import com.artipie.http.rt.RtRule;
 import com.artipie.http.rt.RtRulePath;
 import com.artipie.http.rt.SliceRoute;
@@ -42,23 +43,10 @@ import com.artipie.http.slice.SliceSimple;
 /**
  * HelmSlice.
  * @since 0.1
- * @todo #11:30min Add a test to check if auth works
- *  For now basic auth is implemented and work with anonymous credentials. We need to check if it
- *  work with non anonymous credentials.
  * @checkstyle ClassDataAbstractionCouplingCheck (500 lines)
  * @checkstyle ParameterNumberCheck (500 lines)
  */
 public final class HelmSlice extends Slice.Wrap {
-
-    /**
-     * Permission to publish a chart.
-     */
-    private static final String PERM_PUBLISH = "publish";
-
-    /**
-     * Permission to access repository files.
-     */
-    private static final String PERM_DOWNLOAD = "download";
 
     /**
      * Ctor.
@@ -67,7 +55,7 @@ public final class HelmSlice extends Slice.Wrap {
      * @param base The base path the slice is expected to be accessed from. Example: https://central.artipie.com/helm
      */
     public HelmSlice(final Storage storage, final String base) {
-        this(storage, base, Permissions.FREE, Identities.ANONYMOUS);
+        this(storage, base, Permissions.FREE, Authentication.ANONYMOUS);
     }
 
     /**
@@ -76,32 +64,43 @@ public final class HelmSlice extends Slice.Wrap {
      * @param storage The storage.
      * @param base The base path the slice is expected to be accessed from. Example: https://central.artipie.com/helm
      * @param perms Access permissions.
-     * @param users User identities.
+     * @param auth Authentication.
      */
     public HelmSlice(
         final Storage storage,
         final String base,
         final Permissions perms,
-        final Identities users) {
+        final Authentication auth) {
         super(
             new SliceRoute(
                 new RtRulePath(
                     new RtRule.Any(
-                        new RtRule.ByMethod(RqMethod.PUT),
-                        new RtRule.ByMethod(RqMethod.POST)
+                        new ByMethodsRule(RqMethod.PUT),
+                        new ByMethodsRule(RqMethod.POST)
                     ),
-                    new SliceAuth(
-                        new PushChartSlice(storage, base),
-                        new Permission.ByName(HelmSlice.PERM_PUBLISH, perms),
-                        users
+                    new BasicAuthSlice(
+                        new PushChartSlice(storage),
+                        auth,
+                        new Permission.ByName(perms, Action.Standard.WRITE)
                     )
                 ),
                 new RtRulePath(
-                    new RtRule.ByMethod(RqMethod.GET),
-                    new SliceAuth(
+                    new RtRule.All(
+                        new ByMethodsRule(RqMethod.GET),
+                        new RtRule.ByPath(DownloadIndexSlice.PTRN)
+                    ),
+                    new BasicAuthSlice(
+                        new DownloadIndexSlice(base, storage),
+                        auth,
+                        new Permission.ByName(perms, Action.Standard.READ)
+                    )
+                ),
+                new RtRulePath(
+                    new ByMethodsRule(RqMethod.GET),
+                    new BasicAuthSlice(
                         new SliceDownload(storage),
-                        new Permission.ByName(HelmSlice.PERM_DOWNLOAD, perms),
-                        users
+                        auth,
+                        new Permission.ByName(perms, Action.Standard.READ)
                     )
                 ),
                 new RtRulePath(
