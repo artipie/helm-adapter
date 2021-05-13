@@ -25,22 +25,32 @@ package com.artipie.helm;
 
 import com.artipie.asto.Storage;
 import com.artipie.asto.memory.InMemoryStorage;
+import com.artipie.asto.test.TestResource;
+import com.artipie.helm.http.HelmSlice;
+import com.artipie.http.auth.Authentication;
+import com.artipie.http.auth.JoinedPermissions;
+import com.artipie.http.auth.Permissions;
 import com.artipie.http.rs.RsStatus;
 import com.artipie.vertx.VertxSliceServer;
+import com.google.common.io.ByteStreams;
 import io.vertx.reactivex.core.Vertx;
-import io.vertx.reactivex.core.buffer.Buffer;
-import io.vertx.reactivex.ext.web.client.WebClient;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.net.Authenticator;
+import java.net.HttpURLConnection;
+import java.net.PasswordAuthentication;
 import java.net.ServerSocket;
-import java.net.URISyntaxException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import org.hamcrest.MatcherAssert;
 import org.hamcrest.core.IsEqual;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.Testcontainers;
 import org.testcontainers.containers.Container;
@@ -49,10 +59,7 @@ import org.testcontainers.containers.GenericContainer;
 /**
  * Ensure that helm command line tool is compatible with this adapter.
  *
- * @checkstyle MethodBodyCommentsCheck (500 lines)
  * @checkstyle ClassDataAbstractionCouplingCheck (500 lines)
- * @checkstyle MagicNumberCheck (500 lines)
- * @checkstyle ExecutableStatementCountCheck (500 lines)
  * @since 0.2
  */
 @DisabledIfSystemProperty(named = "os.name", matches = "Windows.*")
@@ -60,103 +67,178 @@ import org.testcontainers.containers.GenericContainer;
 public final class HelmCompatibilityITCase {
 
     /**
+     * Chart name.
+     */
+    private static final String CHART = "tomcat-0.4.1.tgz";
+
+    /**
+     * Username.
+     */
+    private static final String USER = "alice";
+
+    /**
+     * User password.
+     */
+    private static final String PSWD = "123";
+
+    /**
      * The vertx.
      */
     private Vertx vertx;
 
     /**
-     * The helm.
+     * The helm container.
      */
-    private HelmCompatibilityITCase.HelmContainer helm;
+    private HelmCompatibilityITCase.HelmContainer cntn;
 
     /**
-     * The web.
+     * Test container url.
      */
-    private WebClient web;
-
-    /**
-     * The turl.
-     */
-    private String turl;
+    private String url;
 
     /**
      * The server.
      */
     private VertxSliceServer server;
 
+    /**
+     * Port.
+     */
+    private int port;
+
+    /**
+     * URL connection.
+     */
+    private HttpURLConnection con;
+
     @BeforeEach
-    public void before() throws URISyntaxException, IOException {
+    public void before() {
         this.vertx = Vertx.vertx();
-        final Storage fls = new InMemoryStorage();
-        final int port = rndPort();
-        this.turl = String.format("http://host.testcontainers.internal:%d/", port);
-        Testcontainers.exposeHostPorts(port);
-        this.server = new VertxSliceServer(
-            this.vertx,
-            new HelmSlice(fls, this.turl),
-            port
-        );
-        final byte[] tomcat = Files.readAllBytes(
-            Paths.get(
-                Thread.currentThread()
-                    .getContextClassLoader()
-                    .getResource("tomcat-0.4.1.tgz")
-                    .toURI()
-            )
-        );
-        this.web = WebClient.create(this.vertx);
-        this.helm = new HelmCompatibilityITCase.HelmContainer()
-            .withCreateContainerCmdModifier(
-                cmd -> cmd.withEntrypoint("/bin/sh").withCmd("-c", "while sleep 3600; do :; done")
-            );
-        this.server.start();
-        final int code = this.web.post(port, "localhost", "/")
-            .rxSendBuffer(Buffer.buffer(tomcat))
-            .blockingGet()
-            .statusCode();
-        if (code != Integer.parseInt(RsStatus.OK.code())) {
-            throw new IllegalStateException(
-                String.format("Received code non-200 code:%d", code)
-            );
-        }
-        this.helm.start();
     }
 
     @AfterEach
     public void after() {
-        this.helm.stop();
-        this.web.close();
+        this.con.disconnect();
+        this.cntn.stop();
         this.server.close();
         this.vertx.close();
     }
 
-    /**
-     * Helm add repo works.
-     *
-     * @throws IOException If fails
-     * @throws InterruptedException If fails
-     */
-    @Test
-    public void helmRepoAddAndUpateWorks() throws IOException, InterruptedException {
-        exec(this.helm, "helm", "init", "--client-only", "--debug");
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void helmRepoAddAndUpdateWorks(final boolean anonymous) throws Exception {
+        final String hostport = this.init(anonymous);
+        this.con = this.putToLocalhost(anonymous);
         MatcherAssert.assertThat(
-            "helm repo add failed",
-            exec(this.helm, "helm", "repo", "add", "test", this.turl),
-            new IsEqual<>(0)
+            "Response status is 200",
+            this.con.getResponseCode(),
+            new IsEqual<>(Integer.parseInt(RsStatus.OK.code()))
+        );
+        exec(
+            "helm", "init",
+            "--stable-repo-url",
+            String.format(
+                "http://%s:%s@%s",
+                HelmCompatibilityITCase.USER, HelmCompatibilityITCase.PSWD,
+                hostport
+            ),
+            "--client-only", "--debug"
         );
         MatcherAssert.assertThat(
-            "helm repo update failed",
-            exec(this.helm, "helm", "repo", "update"),
-            new IsEqual<>(0)
+            "Chart repository was added",
+            this.helmRepoAdd(anonymous, "chartrepo"),
+            new IsEqual<>(true)
+        );
+        MatcherAssert.assertThat(
+            "helm repo update is successful",
+            exec("helm", "repo", "update"),
+            new IsEqual<>(true)
         );
     }
 
-    private int exec(
-        final HelmCompatibilityITCase.HelmContainer helmc,
-        final String... cmd) throws IOException, InterruptedException {
+    private String init(final boolean anonymous) throws IOException {
+        final Storage fls = new InMemoryStorage();
+        this.port = rndPort();
+        final String hostport = String.format("host.testcontainers.internal:%d/", this.port);
+        this.url = String.format("http://%s", hostport);
+        Testcontainers.exposeHostPorts(this.port);
+        if (anonymous) {
+            this.server = new VertxSliceServer(
+                this.vertx, new HelmSlice(fls, this.url), this.port
+            );
+        } else {
+            this.server = new VertxSliceServer(
+                this.vertx,
+                new HelmSlice(
+                    fls,
+                    this.url,
+                    new JoinedPermissions(
+                        new Permissions.Single(HelmCompatibilityITCase.USER, "download"),
+                        new Permissions.Single(HelmCompatibilityITCase.USER, "upload")
+                    ),
+                    new Authentication.Single(
+                        HelmCompatibilityITCase.USER, HelmCompatibilityITCase.PSWD
+                    )
+                ),
+                this.port
+            );
+        }
+        this.cntn = new HelmCompatibilityITCase.HelmContainer()
+            .withCreateContainerCmdModifier(
+                cmd -> cmd.withEntrypoint("/bin/sh").withCmd("-c", "while sleep 3600; do :; done")
+            );
+        this.server.start();
+        this.cntn.start();
+        return hostport;
+    }
+
+    private boolean helmRepoAdd(final boolean anonymous, final String chartrepo) throws Exception {
+        final List<String> cmdlst = new ArrayList<>(
+            Arrays.asList("helm", "repo", "add", chartrepo, this.url)
+        );
+        if (!anonymous) {
+            cmdlst.add("--username");
+            cmdlst.add(HelmCompatibilityITCase.USER);
+            cmdlst.add("--password");
+            cmdlst.add(HelmCompatibilityITCase.PSWD);
+        }
+        final String[] cmdarr = cmdlst.toArray(new String[0]);
+        return this.exec(cmdarr);
+    }
+
+    private HttpURLConnection putToLocalhost(final boolean anonymous) throws IOException {
+        final HttpURLConnection conn = (HttpURLConnection) new URL(
+            String.format(
+                "http://localhost:%d/%s", this.port, HelmCompatibilityITCase.CHART
+            )
+        ).openConnection();
+        conn.setRequestMethod("PUT");
+        conn.setDoOutput(true);
+        if (!anonymous) {
+            Authenticator.setDefault(
+                new Authenticator() {
+                    @Override
+                    protected PasswordAuthentication getPasswordAuthentication() {
+                        return new PasswordAuthentication(
+                            HelmCompatibilityITCase.USER, HelmCompatibilityITCase.PSWD.toCharArray()
+                        );
+                    }
+                }
+            );
+        }
+        ByteStreams.copy(
+            new ByteArrayInputStream(
+                new TestResource(HelmCompatibilityITCase.CHART).asBytes()
+            ),
+            conn.getOutputStream()
+        );
+        return conn;
+    }
+
+    private boolean exec(final String... cmd) throws IOException, InterruptedException {
         final String joined = String.join(" ", cmd);
         LoggerFactory.getLogger(HelmSliceIT.class).info("Executing:\n{}", joined);
-        final Container.ExecResult exec = helmc.execInContainer(cmd);
+        final Container.ExecResult exec = this.cntn.execInContainer(cmd);
         LoggerFactory.getLogger(HelmSliceIT.class)
             .info("STDOUT:\n{}\nSTDERR:\n{}", exec.getStdout(), exec.getStderr());
         final int code = exec.getExitCode();
@@ -164,7 +246,7 @@ public final class HelmCompatibilityITCase {
             LoggerFactory.getLogger(HelmSliceIT.class)
                 .error("'{}' failed with {} code", joined, code);
         }
-        return code;
+        return code == 0;
     }
 
     /**

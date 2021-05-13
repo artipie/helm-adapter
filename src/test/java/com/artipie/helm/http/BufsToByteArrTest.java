@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-package com.artipie.helm;
+package com.artipie.helm.http;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;

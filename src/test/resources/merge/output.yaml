@@ -1,0 +1,56 @@
+apiVersion: v1
+entries:
+  ark:
+  - apiVersion: v1
+    appVersion: 0.8.2
+    created: "2021-01-11T16:21:01.4614001+03:00"
+    description: A Helm chart for ark
+    digest: b2f648cc0e2caad299ad008ecbb1d7330f61cc44cef5020b9de265cdd457a0dd
+    home: https://heptio.com/products/#heptio-ark
+    maintainers:
+    - email: d-caruso@hotmail.it
+      name: domcar
+    - email: unguiculus@gmail.com
+      name: unguiculus
+    name: ark
+    sources:
+    - https://github.com/heptio/ark
+    urls:
+    - http://central.artipie.com/helm/ark-1.0.1.tgz
+    version: 1.0.1
+  mychart:
+  - apiVersion: v1
+    appVersion: "1.0"
+    created: "2021-01-21T16:40:54.0752761+03:00"
+    description: A Helm chart for Kubernetes
+    digest: 1224ddf156c5a3c1688afc42985efceb246d4750fad9b6b2f22405f0fd0fc120
+    name: mychart
+    urls:
+    - https://charts.helm.sh/stable/mychart-0.1.0.tgz
+    version: 0.1.0
+  tomcat:
+  - apiVersion: v1
+    appVersion: "7.0"
+    created: "2021-01-11T16:21:01.3765985+03:00"
+    description: Deploy a basic tomcat application server with sidecar as web archive
+      container
+    digest: d8dcdcfcb512595960979cbd44728a8d8b0194c88335d0f84543e84b3939b8ce
+    home: https://github.com/yahavb
+    icon: http://tomcat.apache.org/res/images/tomcat.png
+    maintainers:
+    - email: ybiran@ananware.systems
+      name: yahavb
+    name: tomcat
+    urls:
+    - http://central.artipie.com/helm/tomcat-0.4.1.tgz
+    version: 0.4.1
+  - apiVersion: v1
+    appVersion: "1.0"
+    created: "2021-01-21T16:40:54.0762778+03:00"
+    description: Tomcat 0.1.0 from remote
+    digest: 1d8ff8937ed45e7a508e6c6d03de01de2e0b5a8f0aaba2fda84415fcaff7ac7e
+    name: tomcat
+    urls:
+    - https://charts.helm.sh/stable/tomcat-0.1.0.tgz
+    version: 0.1.0
+generated: "2021-01-21T16:40:54.0742762+03:00"
