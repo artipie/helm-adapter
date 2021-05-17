@@ -27,14 +27,18 @@ import com.artipie.asto.Content;
 import com.artipie.asto.Key;
 import com.artipie.asto.Storage;
 import com.artipie.asto.ValueNotFoundException;
+import com.artipie.asto.ext.PublisherAs;
 import com.artipie.asto.memory.InMemoryStorage;
 import com.artipie.asto.test.TestResource;
 import com.artipie.helm.metadata.IndexYaml;
+import com.artipie.helm.metadata.IndexYamlMapping;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.concurrent.CompletionException;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.hamcrest.MatcherAssert;
+import org.hamcrest.core.IsEqual;
 import org.hamcrest.core.IsInstanceOf;
 import org.hamcrest.core.StringContains;
 import org.junit.jupiter.api.Assertions;
@@ -100,6 +104,32 @@ final class HelmAstoDeleteTest {
         MatcherAssert.assertThat(
             thr.getCause(),
             new IsInstanceOf(ValueNotFoundException.class)
+        );
+    }
+
+    @Test
+    void deletesChartFromIndexAndItsArchive() {
+        final String tomcat = "tomcat-0.4.1.tgz";
+        final String arkone = "ark-1.0.1.tgz";
+        final String arktwo = "ark-1.2.0.tgz";
+        Stream.of(tomcat, arkone, arktwo)
+            .forEach(chart -> new TestResource(chart).saveTo(this.storage));
+        this.saveSourceIndex("index.yaml");
+        this.delete(arkone);
+        MatcherAssert.assertThat(
+            "Removed chart is not removed",
+            new IndexYamlMapping(
+                new PublisherAs(
+                    this.storage.value(IndexYaml.INDEX_YAML).join()
+                ).asciiString().toCompletableFuture().join()
+            ).byChartAndVersion("ark", "1.0.1")
+            .isPresent(),
+            new IsEqual<>(false)
+        );
+        MatcherAssert.assertThat(
+            "Archive of removed chart remained",
+            this.storage.exists(new Key.From(arkone)).join(),
+            new IsEqual<>(false)
         );
     }
 

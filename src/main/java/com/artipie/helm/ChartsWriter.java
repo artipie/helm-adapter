@@ -30,6 +30,7 @@ import com.artipie.helm.metadata.IndexYaml;
 import com.artipie.helm.metadata.IndexYamlMapping;
 import com.artipie.helm.metadata.ParsedChartName;
 import com.artipie.helm.metadata.YamlWriter;
+import com.artipie.helm.misc.DateTimeNow;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -46,7 +47,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.tuple.Pair;
 
 /**
@@ -57,6 +57,12 @@ import org.apache.commons.lang3.tuple.Pair;
  * @checkstyle ExecutableStatementCountCheck (500 lines)
  * @checkstyle ClassDataAbstractionCouplingCheck (500 lines)
  * @checkstyle NestedIfDepthCheck (500 lines)
+ * @checkstyle NPathComplexityCheck (500 lines)
+ * @todo #109:30min Extract classes for different operations.
+ *  Now this class encapsulates logic for several operations. And it is quite large.
+ *  It would be better to divide this class in separate classes for each
+ *  operation. Probably some other types of refactoring is possible here
+ *  for simplification.
  */
 @SuppressWarnings({"PMD.AvoidDuplicateLiterals", "PMD.AssignmentInOperand"})
 final class ChartsWriter {
@@ -69,6 +75,11 @@ final class ChartsWriter {
      * Entries.
      */
     static final String ENTRS = "entries:";
+
+    /**
+     * Generate.
+     */
+    static final String TAG_GENERATED = "generated:";
 
     /**
      * Storage.
@@ -144,7 +155,7 @@ final class ChartsWriter {
                                 ChartsWriter.writeRemainedChartsAfterCopyIndex(pckgs, writer);
                                 entrs = false;
                             }
-                            writer.writeLine(line, 0);
+                            ChartsWriter.writeAndReplaceTagGenerated(line, writer);
                         }
                         if (entrs) {
                             ChartsWriter.writeRemainedChartsAfterCopyIndex(pckgs, writer);
@@ -160,13 +171,15 @@ final class ChartsWriter {
     /**
      * Rewrites source index file avoiding writing down info about charts which
      * contains in charts collection. If passed for deletion chart does bot exist
-     * in index file, an exception will be thrown.
+     * in index file, an exception will be thrown. It processes source file by
+     * reading batch of versions for each chart from source index. Then versions
+     * which should not be deleted from file are rewritten to new index file.
      * @param source Path to temporary file with index
      * @param out Path to temporary file in which new index would be written
      * @param charts Collection with keys for charts which should be deleted
      * @return Result of completion
      */
-    @SuppressWarnings("PMD.AvoidDeeplyNestedIfStmts")
+    @SuppressWarnings({"PMD.AvoidDeeplyNestedIfStmts", "PMD.NPathComplexity"})
     public CompletionStage<Void> delete(
         final Path source,
         final Path out,
@@ -210,16 +223,21 @@ final class ChartsWriter {
                                         }
                                         if (posspace == writer.indent()) {
                                             if (name != null) {
-                                                lines.clear();
-                                                throw new NotImplementedException(
-                                                    "not implemented yet"
-                                                );
+                                                writeIfNotContainInDeleted(lines, pckgs, writer);
                                             }
-                                            lines.add(line);
                                             name = trimmed.replace(":", "");
                                         }
                                     }
-                                    writer.writeLine(line, 0);
+                                    if (entrs && name != null && posspace == 0) {
+                                        entrs = false;
+                                        writeIfNotContainInDeleted(lines, pckgs, writer);
+                                    }
+                                    if (entrs && name != null) {
+                                        lines.add(line);
+                                    }
+                                    if (lines.isEmpty()) {
+                                        writeAndReplaceTagGenerated(line, writer);
+                                    }
                                 }
                             } catch (final IOException exc) {
                                 throw new UncheckedIOException(exc);
@@ -228,6 +246,66 @@ final class ChartsWriter {
                         }
                     )
             );
+    }
+
+    /**
+     * Write line if it does not start with tag generated. Otherwise replaces the value
+     * of tag `generated` to update time when this index was generated.
+     * @param line Parsed line
+     * @param writer Writer
+     * @throws IOException In case of exception during writing
+     */
+    private static void writeAndReplaceTagGenerated(final String line, final YamlWriter writer)
+        throws IOException {
+        if (line.startsWith(ChartsWriter.TAG_GENERATED)) {
+            writer.writeLine(
+                String.format(
+                    "%s %s", ChartsWriter.TAG_GENERATED, new DateTimeNow().asString()
+                ),
+                0
+            );
+        } else {
+            writer.writeLine(line, 0);
+        }
+    }
+
+    /**
+     * Writes info about all versions of chart to new index if chart with specified
+     * name and version does not exist in collection of charts which should be removed
+     * from index file.
+     * @param lines Parsed lines
+     * @param pckgs Charts which should be removed
+     * @param writer Writer
+     * @throws IOException In case of exception during writing
+     */
+    private static void writeIfNotContainInDeleted(
+        final List<String> lines,
+        final Map<String, Set<String>> pckgs,
+        final YamlWriter writer
+    ) throws IOException {
+        final ChartVersions items = new ChartVersions(lines);
+        final String name = items.name().trim().replace(":", "");
+        final Map<String, List<String>> vrsns = items.versions();
+        boolean recordedname = false;
+        if (pckgs.containsKey(name)) {
+            for (final String vers : vrsns.keySet()) {
+                if (!pckgs.get(name).contains(vers)) {
+                    if (!recordedname) {
+                        recordedname = true;
+                        writer.writeLine(items.name(), 0);
+                    }
+                    final List<String> entry = vrsns.get(vers);
+                    for (final String line : entry) {
+                        writer.writeLine(line, 0);
+                    }
+                }
+            }
+        } else {
+            for (final String line : lines) {
+                writer.writeLine(line, 0);
+            }
+        }
+        lines.clear();
     }
 
     /**
@@ -369,5 +447,73 @@ final class ChartsWriter {
      */
     private static int lastPosOfSpaceInBegin(final String line) {
         return line.length() - line.replaceAll("^\\s*", "").length();
+    }
+
+    /**
+     * Extracts versions for chart from passed parsed lines.
+     * @since 0.3
+     */
+    private static final class ChartVersions {
+        /**
+         * Parsed lines.
+         */
+        private final List<String> lines;
+
+        /**
+         * First line should contain name of chart. It is important that
+         * these lines are not trimmed.
+         * @param lines Parsed lines from index file
+         */
+        ChartVersions(final List<String> lines) {
+            this.lines = lines;
+        }
+
+        /**
+         * Extracts versions from parsed lines. It is necessary because one chart can
+         * have many versions and parsed lines contain all of them.
+         * @return Map with info from index file for each version of chart.
+         */
+        public Map<String, List<String>> versions() {
+            final Map<String, List<String>> vrsns = new HashMap<>();
+            final char dash = '-';
+            if (this.lines.size() > 1) {
+                final int indent = this.lines.get(1).indexOf(dash);
+                final List<String> tmp = new ArrayList<>(2);
+                for (int idx = 1; idx < this.lines.size(); idx += 1) {
+                    if (this.lines.get(idx).charAt(indent) == dash && !tmp.isEmpty()) {
+                        vrsns.put(version(tmp), new ArrayList<>(tmp));
+                        tmp.clear();
+                    }
+                    tmp.add(this.lines.get(idx));
+                }
+                vrsns.put(version(tmp), new ArrayList<>(tmp));
+            }
+            return vrsns;
+        }
+
+        /**
+         * Obtains name of chart.
+         * @return Name of chart.
+         */
+        public String name() {
+            if (!this.lines.isEmpty()) {
+                return this.lines.get(0);
+            }
+            throw new IllegalStateException("Failed to get name as there are no lines");
+        }
+
+        /**
+         * Extracts version from parsed lines.
+         * @param entry Parsed lines from index with version
+         * @return Version from parsed lines.
+         */
+        private static String version(final List<String> entry) {
+            return entry.stream().filter(
+                line -> line.trim().startsWith(ChartsWriter.VRSNS)
+            ).map(line -> line.replace(ChartsWriter.VRSNS, ""))
+            .map(String::trim)
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("Couldn't find version for deletion"));
+        }
     }
 }

@@ -177,6 +177,12 @@ public interface Helm {
                                             tmp -> this.moveFromTempStorageAndDelete(
                                                 tmp, outidx.get(), dir.get()
                                             )
+                                        ).thenCompose(
+                                            noth -> CompletableFuture.allOf(
+                                                charts.stream()
+                                                    .map(this.storage::delete)
+                                                    .toArray(CompletableFuture[]::new)
+                                            )
                                         );
                                 } catch (final IOException exc) {
                                     throw new UncheckedIOException(exc);
