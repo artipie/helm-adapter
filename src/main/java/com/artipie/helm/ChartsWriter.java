@@ -23,6 +23,7 @@
  */
 package com.artipie.helm;
 
+import com.artipie.asto.Key;
 import com.artipie.asto.Storage;
 import com.artipie.helm.metadata.Index;
 import com.artipie.helm.metadata.IndexYaml;
@@ -37,11 +38,15 @@ import java.io.OutputStreamWriter;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.tuple.Pair;
 
 /**
@@ -51,8 +56,9 @@ import org.apache.commons.lang3.tuple.Pair;
  * @checkstyle CyclomaticComplexityCheck (500 lines)
  * @checkstyle ExecutableStatementCountCheck (500 lines)
  * @checkstyle ClassDataAbstractionCouplingCheck (500 lines)
+ * @checkstyle NestedIfDepthCheck (500 lines)
  */
-@SuppressWarnings("PMD.AvoidDuplicateLiterals")
+@SuppressWarnings({"PMD.AvoidDuplicateLiterals", "PMD.AssignmentInOperand"})
 final class ChartsWriter {
     /**
      * Versions.
@@ -94,7 +100,6 @@ final class ChartsWriter {
      *  adding to index file. There is a version and chart yaml for each package.
      * @return Result of completion
      */
-    @SuppressWarnings("PMD.AssignmentInOperand")
     public CompletionStage<Void> addChartsToIndex(
         final Path source,
         final Path out,
@@ -118,16 +123,15 @@ final class ChartsWriter {
                         YamlWriter writer = new YamlWriter(bufw, 2);
                         while ((line = br.readLine()) != null) {
                             final String trimmed = line.trim();
+                            final int lastposspace = ChartsWriter.lastPosOfSpaceInBegin(line);
                             if (!entrs) {
                                 entrs = trimmed.equals(ChartsWriter.ENTRS);
                             }
                             if (entrs && new ParsedChartName(line).valid()) {
                                 if (name == null) {
-                                    writer = new YamlWriter(
-                                        bufw, ChartsWriter.lastPosOfSpaceInBegin(line)
-                                    );
+                                    writer = new YamlWriter(bufw, lastposspace);
                                 }
-                                if (ChartsWriter.lastPosOfSpaceInBegin(line) == writer.indent()) {
+                                if (lastposspace == writer.indent()) {
                                     ChartsWriter.writeRemainedVersionsOfChart(name, pckgs, writer);
                                     name = trimmed.replace(":", "");
                                 }
@@ -135,9 +139,7 @@ final class ChartsWriter {
                             if (entrs) {
                                 ChartsWriter.throwIfVersionExists(trimmed, name, pckgs);
                             }
-                            if (entrs && name != null
-                                && ChartsWriter.lastPosOfSpaceInBegin(line) == 0
-                            ) {
+                            if (entrs && name != null && lastposspace == 0) {
                                 ChartsWriter.writeRemainedVersionsOfChart(name, pckgs, writer);
                                 ChartsWriter.writeRemainedChartsAfterCopyIndex(pckgs, writer);
                                 entrs = false;
@@ -153,6 +155,112 @@ final class ChartsWriter {
                     return CompletableFuture.allOf();
                 }
             );
+    }
+
+    /**
+     * Rewrites source index file avoiding writing down info about charts which
+     * contains in charts collection. If passed for deletion chart does bot exist
+     * in index file, an exception will be thrown.
+     * @param source Path to temporary file with index
+     * @param out Path to temporary file in which new index would be written
+     * @param charts Collection with keys for charts which should be deleted
+     * @return Result of completion
+     */
+    @SuppressWarnings("PMD.AvoidDeeplyNestedIfStmts")
+    public CompletionStage<Void> delete(
+        final Path source,
+        final Path out,
+        final Collection<Key> charts
+    ) {
+        return new Charts.Asto(this.storage)
+            .versionsFor(charts)
+            .thenCombine(
+                this.storage.exists(IndexYaml.INDEX_YAML).thenCompose(this::versionsByPckgs),
+                (todelete, fromidx) -> {
+                    checkExistenceChartsToDelete(fromidx, todelete);
+                    return todelete;
+                }
+            ).thenCompose(
+                pckgs -> this.storage.exists(IndexYaml.INDEX_YAML)
+                    .thenCompose(this::versionsByPckgs)
+                    .thenCompose(
+                        vrsns -> {
+                            try (
+                                BufferedReader br = new BufferedReader(
+                                    new InputStreamReader(Files.newInputStream(source))
+                                );
+                                BufferedWriter bufw = new BufferedWriter(
+                                    new OutputStreamWriter(Files.newOutputStream(out))
+                                )
+                            ) {
+                                String line;
+                                boolean entrs = false;
+                                String name = null;
+                                final List<String> lines = new ArrayList<>(2);
+                                YamlWriter writer = new YamlWriter(bufw, 2);
+                                while ((line = br.readLine()) != null) {
+                                    final String trimmed = line.trim();
+                                    final int posspace = ChartsWriter.lastPosOfSpaceInBegin(line);
+                                    if (!entrs) {
+                                        entrs = trimmed.equals(ChartsWriter.ENTRS);
+                                    }
+                                    if (entrs && new ParsedChartName(line).valid()) {
+                                        if (name == null) {
+                                            writer = new YamlWriter(bufw, posspace);
+                                        }
+                                        if (posspace == writer.indent()) {
+                                            if (name != null) {
+                                                lines.clear();
+                                                throw new NotImplementedException(
+                                                    "not implemented yet"
+                                                );
+                                            }
+                                            lines.add(line);
+                                            name = trimmed.replace(":", "");
+                                        }
+                                    }
+                                    writer.writeLine(line, 0);
+                                }
+                            } catch (final IOException exc) {
+                                throw new UncheckedIOException(exc);
+                            }
+                            return CompletableFuture.allOf();
+                        }
+                    )
+            );
+    }
+
+    /**
+     * Checks whether all charts with specified versions exist in index file,
+     * in case of absence one of them an exception will be thrown.
+     * @param fromidx Charts with specified versions from index file
+     * @param todelete Charts with specified versions which should be deleted
+     */
+    private static void checkExistenceChartsToDelete(
+        final Map<String, Set<String>> fromidx,
+        final Map<String, Set<String>> todelete
+    ) {
+        for (final String pckg : todelete.keySet()) {
+            if (!fromidx.containsKey(pckg)) {
+                throw new IllegalStateException(
+                    String.format(
+                        "Failed to delete package `%s` as it is absent in index", pckg
+                    )
+                );
+            }
+            for (final String vrsn : todelete.get(pckg)) {
+                if (!fromidx.get(pckg).contains(vrsn)) {
+                    // @checkstyle LineLengthCheck (3 lines)
+                    throw new IllegalStateException(
+                        String.format(
+                            "Failed to delete package `%s` with version `%s` as it is absent in index",
+                            pckg,
+                            vrsn
+                        )
+                    );
+                }
+            }
+        }
     }
 
     /**

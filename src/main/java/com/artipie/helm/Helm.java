@@ -28,7 +28,6 @@ import com.artipie.asto.Copy;
 import com.artipie.asto.Key;
 import com.artipie.asto.Storage;
 import com.artipie.asto.fs.FileStorage;
-import com.artipie.helm.metadata.Index;
 import com.artipie.helm.metadata.IndexYaml;
 import com.artipie.helm.misc.EmptyIndex;
 import java.io.IOException;
@@ -36,9 +35,6 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicReference;
@@ -156,78 +152,44 @@ public interface Helm {
             } else {
                 final AtomicReference<Key> outidx = new AtomicReference<>();
                 final AtomicReference<Path> dir = new AtomicReference<>();
-                res = new Charts.Asto(this.storage)
-                    .versionsFor(charts)
-                    .thenCombine(
-                        this.storage.exists(IndexYaml.INDEX_YAML)
-                            .thenCompose(this::versionsByPckgs),
-                        (todelete, fromidx) -> {
-                            checkExistenceChartsToDelete(fromidx, todelete);
-                            return null;
-                        }
-                    ).thenCompose(
-                        nothing -> {
-                            try {
-                                final String prfx = "index-";
-                                dir.set(Files.createTempDirectory(prfx));
-                                final Path source = Files.createTempFile(dir.get(), prfx, ".yaml");
-                                final Path out = Files.createTempFile(dir.get(), prfx, "-out.yaml");
-                                final Storage tmpstrg = new FileStorage(dir.get());
-                                outidx.set(new Key.From(out.getFileName().toString()));
-                                return this.storage.value(IndexYaml.INDEX_YAML)
-                                    .thenCompose(
-                                        cont -> tmpstrg.save(
-                                            new Key.From(source.getFileName().toString()), cont
-                                        )
-                                    ).thenCompose(
-                                        noth -> {
-                                            throw new NotImplementedException(
-                                                "not implemented yet"
-                                            );
-                                        }
-                                    ).thenApply(noth -> tmpstrg);
-                            } catch (final IOException exc) {
-                                throw new UncheckedIOException(exc);
+                res = this.storage.exists(IndexYaml.INDEX_YAML)
+                    .thenCompose(
+                        exists -> {
+                            if (exists) {
+                                try {
+                                    final String prfx = "index-";
+                                    dir.set(Files.createTempDirectory(prfx));
+                                    final Path src = Files.createTempFile(dir.get(), prfx, ".yaml");
+                                    final Path out;
+                                    out = Files.createTempFile(dir.get(), prfx, "-out.yaml");
+                                    final Storage tmpstrg = new FileStorage(dir.get());
+                                    outidx.set(new Key.From(out.getFileName().toString()));
+                                    return this.storage.value(IndexYaml.INDEX_YAML)
+                                        .thenCompose(
+                                            cont -> tmpstrg.save(
+                                                new Key.From(src.getFileName().toString()), cont
+                                            )
+                                        ).thenCompose(
+                                            noth -> new ChartsWriter(this.storage)
+                                                .delete(src, out, charts)
+                                        ).thenApply(noth -> tmpstrg)
+                                        .thenCompose(
+                                            tmp -> this.moveFromTempStorageAndDelete(
+                                                tmp, outidx.get(), dir.get()
+                                            )
+                                        );
+                                } catch (final IOException exc) {
+                                    throw new UncheckedIOException(exc);
+                                }
+                            } else {
+                                throw new IllegalStateException(
+                                    "Failed to delete packages as index does not exist"
+                                );
                             }
                         }
-                    ).thenCompose(
-                        tmp -> this.moveFromTempStorageAndDelete(tmp, outidx.get(), dir.get())
                     );
             }
             return res;
-        }
-
-        /**
-         * Checks whether all charts with specified versions exist in index file,
-         * in case of absence one of them an exception will be thrown.
-         * @param fromidx Charts with specified versions from index file
-         * @param todelete Charts with specified versions which should be deleted
-         */
-        private static void checkExistenceChartsToDelete(
-            final Map<String, Set<String>> fromidx,
-            final Map<String, Set<String>> todelete
-        ) {
-            for (final String pckg : todelete.keySet()) {
-                if (!fromidx.containsKey(pckg)) {
-                    throw new IllegalStateException(
-                        String.format(
-                            "Failed to delete package `%s` as it is absent in index", pckg
-                        )
-                    );
-                }
-                for (final String vrsn : todelete.get(pckg)) {
-                    if (!fromidx.get(pckg).contains(vrsn)) {
-                        // @checkstyle LineLengthCheck (3 lines)
-                        throw new IllegalStateException(
-                            String.format(
-                                "Failed to delete package `%s` with version `%s` as it is absent in index",
-                                pckg,
-                                vrsn
-                            )
-                        );
-                    }
-                }
-            }
         }
 
         /**
@@ -247,22 +209,6 @@ public interface Helm {
                 .thenCompose(noth -> this.storage.move(outidx, IndexYaml.INDEX_YAML))
                 .thenApply(noth -> FileUtils.deleteQuietly(tmpdir.toFile()))
                 .thenCompose(ignore -> CompletableFuture.allOf());
-        }
-
-        /**
-         * Obtains versions by packages from source index file or empty collection in case of
-         * absence source index file.
-         * @param exists Does source index file exist?
-         * @return Versions by packages.
-         */
-        private CompletionStage<Map<String, Set<String>>> versionsByPckgs(final boolean exists) {
-            final CompletionStage<Map<String, Set<String>>> res;
-            if (exists) {
-                res = new Index.WithBreaks(this.storage).versionsByPackages();
-            } else {
-                res = CompletableFuture.completedFuture(new HashMap<>());
-            }
-            return res;
         }
     }
 }

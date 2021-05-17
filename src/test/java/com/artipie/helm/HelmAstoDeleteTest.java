@@ -92,6 +92,7 @@ final class HelmAstoDeleteTest {
     @Test
     void throwsExceptionWhenKeyNotExist() {
         final String chart = "not-exist.tgz";
+        this.storage.save(IndexYaml.INDEX_YAML, Content.EMPTY);
         final Throwable thr = Assertions.assertThrows(
             CompletionException.class,
             () -> this.delete(chart)
