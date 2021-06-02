@@ -39,7 +39,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-import java.util.function.Function;
 
 /**
  * Reader of `index.yaml` file which does not read the entire file into memory.
@@ -53,9 +52,10 @@ import java.util.function.Function;
 public interface Index {
     /**
      * Obtains versions for packages which exist in the index file.
+     * @param idxpath Path to index file
      * @return Map where key is a package name, value is represented versions.
      */
-    CompletionStage<Map<String, Set<String>>> versionsByPackages();
+    CompletionStage<Map<String, Set<String>>> versionsByPackages(Key idxpath);
 
     /**
      * Reader of `index.yaml` which contains break lines.
@@ -95,26 +95,31 @@ public interface Index {
         }
 
         @Override
-        public CompletionStage<Map<String, Set<String>>> versionsByPackages() {
-            return CompletableFuture.supplyAsync(
-                () -> {
-                    CompletionStage<Map<String, Set<String>>> res;
-                    try {
-                        final String prefix = "index-";
-                        final Path tmp = Files.createTempDirectory(prefix);
-                        final Path file = Files.createTempFile(tmp, prefix, ".yaml");
-                        res = this.storage.value(IndexYaml.INDEX_YAML)
-                            .thenCompose(
-                                cont -> new FileStorage(tmp).save(
-                                    new Key.From(file.getFileName().toString()), cont
-                                )
-                            ).thenApply(ignore -> WithBreaks.versionsByPckgs(file));
-                    } catch (final IOException exc) {
-                        res = new FailedCompletionStage<>(exc);
+        public CompletionStage<Map<String, Set<String>>> versionsByPackages(final Key idx) {
+            return this.storage.exists(idx)
+                .thenCompose(
+                    exists -> {
+                        CompletionStage<Map<String, Set<String>>> res;
+                        if (exists) {
+                            try {
+                                final String prefix = "index-";
+                                final Path tmp = Files.createTempDirectory(prefix);
+                                final Path file = Files.createTempFile(tmp, prefix, ".yaml");
+                                res = this.storage.value(idx)
+                                    .thenCompose(
+                                        cont -> new FileStorage(tmp).save(
+                                            new Key.From(file.getFileName().toString()), cont
+                                        )
+                                    ).thenApply(ignore -> WithBreaks.versionsByPckgs(file));
+                            } catch (final IOException exc) {
+                                res = new FailedCompletionStage<>(exc);
+                            }
+                        } else {
+                            res = CompletableFuture.completedFuture(new HashMap<>());
+                        }
+                        return res;
                     }
-                    return res;
-                }
-            ).thenCompose(Function.identity());
+                );
         }
 
         /**
@@ -155,13 +160,11 @@ public interface Index {
                     if (!entrs) {
                         entrs = trimmed.equals(WithBreaks.ENTRS);
                     }
-                    if (entrs && trimmed.endsWith(":") && !trimmed.equals(WithBreaks.ENTRS)) {
+                    if (new ParsedChartName(line).valid()) {
                         if (name == null) {
                             indent = WithBreaks.lastPosOfSpaceInBegin(line);
                         }
-                        if (WithBreaks.lastPosOfSpaceInBegin(line) == indent
-                            && line.trim().charAt(0) != '-'
-                        ) {
+                        if (WithBreaks.lastPosOfSpaceInBegin(line) == indent) {
                             name = trimmed.replace(":", "");
                             vrns.put(name, new HashSet<>());
                         }

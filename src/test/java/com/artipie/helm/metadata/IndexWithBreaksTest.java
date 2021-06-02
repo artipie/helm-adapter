@@ -23,6 +23,7 @@
  */
 package com.artipie.helm.metadata;
 
+import com.artipie.asto.Key;
 import com.artipie.asto.Storage;
 import com.artipie.asto.blocking.BlockingStorage;
 import com.artipie.asto.memory.InMemoryStorage;
@@ -34,7 +35,7 @@ import org.hamcrest.MatcherAssert;
 import org.hamcrest.Matchers;
 import org.hamcrest.core.IsEqual;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
 
 /**
  * Test for {@link Index.WithBreaks}.
@@ -42,17 +43,19 @@ import org.junit.jupiter.params.provider.ValueSource;
  */
 final class IndexWithBreaksTest {
     @ParameterizedTest
-    @ValueSource(strings = {"index.yaml", "index/index-four-spaces.yaml"})
-    void returnsVersionsForPackages(final String index) {
+    @CsvSource({
+        "index.yaml,''",
+        "index/index-four-spaces.yaml,''",
+        "index.yaml,prefix"
+    })
+    void returnsVersionsForPackages(final String index, final String prefix) {
         final String tomcat = "tomcat";
         final String ark = "ark";
+        final Key keyidx = new Key.From(new Key.From(prefix), IndexYaml.INDEX_YAML);
         final Storage storage = new InMemoryStorage();
-        new BlockingStorage(storage).save(
-            IndexYaml.INDEX_YAML,
-            new TestResource(index).asBytes()
-        );
+        new BlockingStorage(storage).save(keyidx, new TestResource(index).asBytes());
         final Map<String, Set<String>> vrsns = new Index.WithBreaks(storage)
-            .versionsByPackages()
+            .versionsByPackages(keyidx)
             .toCompletableFuture().join();
         MatcherAssert.assertThat(
             "Does not contain required packages",
