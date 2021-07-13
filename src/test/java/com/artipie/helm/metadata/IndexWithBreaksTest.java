@@ -29,9 +29,6 @@ import com.artipie.asto.blocking.BlockingStorage;
 import com.artipie.asto.memory.InMemoryStorage;
 import com.artipie.asto.test.TestResource;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Map;
 import java.util.Set;
 import org.cactoos.set.SetOf;
@@ -75,13 +72,6 @@ final class IndexWithBreaksTest {
             "Parsed versions for `ark` are incorrect",
             vrsns.get(ark),
             Matchers.containsInAnyOrder("1.0.1", "1.2.0")
-        );
-        final Path systemtemp = Paths.get(System.getProperty("java.io.tmpdir"));
-        MatcherAssert.assertThat(
-            "Temp dir for indexes was not removed",
-            Files.list(systemtemp)
-                .noneMatch(path -> path.getFileName().toString().startsWith("index-")),
-            new IsEqual<>(true)
         );
     }
 }
