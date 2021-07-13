@@ -23,6 +23,7 @@
  */
 package com.artipie.helm.metadata;
 
+import com.artipie.helm.misc.DateTimeNow;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import org.apache.commons.lang3.StringUtils;
@@ -32,6 +33,11 @@ import org.apache.commons.lang3.StringUtils;
  * @since 0.3
  */
 public final class YamlWriter {
+    /**
+     * Generated tag.
+     */
+    static final String TAG_GENERATED = "generated:";
+
     /**
      * Required indent.
      */
@@ -75,5 +81,24 @@ public final class YamlWriter {
             )
         );
         this.writer.newLine();
+    }
+
+    /**
+     * Write line if it does not start with tag generated. Otherwise replaces the value
+     * of tag `generated` to update time when this index was generated.
+     * @param line Parsed line
+     * @throws IOException In case of exception during writing
+     */
+    public void writeAndReplaceTagGenerated(final String line) throws IOException {
+        if (line.startsWith(YamlWriter.TAG_GENERATED)) {
+            this.writeLine(
+                String.format(
+                    "%s %s", YamlWriter.TAG_GENERATED, new DateTimeNow().asString()
+                ),
+                0
+            );
+        } else {
+            this.writeLine(line, 0);
+        }
     }
 }

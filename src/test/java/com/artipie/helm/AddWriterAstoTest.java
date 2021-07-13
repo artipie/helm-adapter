@@ -32,11 +32,9 @@ import com.artipie.helm.metadata.IndexYaml;
 import com.artipie.helm.metadata.IndexYamlMapping;
 import com.artipie.helm.test.ContentOfIndex;
 import com.jcabi.log.Logger;
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -71,9 +69,9 @@ final class AddWriterAstoTest {
     private Path dir;
 
     /**
-     * Path to source index file.
+     * Key to source index file.
      */
-    private Path source;
+    private Key source;
 
     /**
      * Path for index file where it will rewritten.
@@ -89,9 +87,7 @@ final class AddWriterAstoTest {
     void setUp() throws IOException {
         this.dir = Files.createTempDirectory("");
         final String prfx = "index-";
-        this.source = new File(
-            Paths.get(this.dir.toString(), IndexYaml.INDEX_YAML.string()).toString()
-        ).toPath();
+        this.source = new Key.From(IndexYaml.INDEX_YAML.string());
         this.out = Files.createTempFile(this.dir, prfx, "-out.yaml");
         this.storage = new FileStorage(this.dir);
     }

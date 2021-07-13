@@ -31,7 +31,6 @@ import com.artipie.asto.Key;
 import com.artipie.asto.Storage;
 import com.artipie.asto.fs.FileStorage;
 import com.artipie.helm.metadata.IndexYaml;
-import com.artipie.helm.misc.EmptyIndex;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -116,7 +115,6 @@ public interface Helm {
 
         @Override
         public CompletionStage<Void> add(final Collection<Key> charts, final Key indexpath) {
-            final AtomicReference<Key> outidx = new AtomicReference<>();
             final AtomicReference<Path> dir = new AtomicReference<>();
             final Key keyidx = new Key.From(indexpath, IndexYaml.INDEX_YAML);
             final CompletableFuture<Void> result = new CompletableFuture<>();
@@ -130,44 +128,27 @@ public interface Helm {
                             try {
                                 final String prfx = "index-";
                                 dir.set(Files.createTempDirectory(prfx));
-                                final Path source = Files.createTempFile(dir.get(), prfx, ".yaml");
                                 final Path out = Files.createTempFile(dir.get(), prfx, "-out.yaml");
+                                final Key outidx = new Key.From(out.getFileName().toString());
                                 final Storage tmpstrg = new FileStorage(dir.get());
-                                outidx.set(new Key.From(out.getFileName().toString()));
-                                return this.storage.exists(keyidx)
+                                return tmpstrg.save(outidx, Content.EMPTY)
+                                    .thenApply(noth -> new AddWriter.Asto(this.storage))
+                                    .thenCompose(writer -> writer.add(keyidx, out, pckgs))
                                     .thenCompose(
-                                        exists -> {
-                                            final CompletionStage<Content> res;
-                                            if (exists) {
-                                                res = this.storage.value(keyidx);
+                                        noth -> this.moveFromTempStorageAndDelete(
+                                            tmpstrg, outidx, dir.get(), keyidx
+                                        )
+                                    ).handle(
+                                        (noth, thr) -> {
+                                            if (thr == null) {
+                                                result.complete(null);
                                             } else {
-                                                res = CompletableFuture.completedFuture(
-                                                    new EmptyIndex().asContent()
-                                                );
+                                                FileUtils.deleteQuietly(out.getParent().toFile());
+                                                result.completeExceptionally(thr);
                                             }
-                                            return res;
+                                            return null;
                                         }
-                                ).thenCompose(
-                                    cont -> tmpstrg.save(
-                                        new Key.From(source.getFileName().toString()), cont
-                                    )
-                                ).thenApply(noth -> new AddWriter.Asto(tmpstrg))
-                                .thenCompose(writer -> writer.add(source, out, pckgs))
-                                .thenCompose(
-                                    noth -> this.moveFromTempStorageAndDelete(
-                                        tmpstrg, outidx.get(), dir.get(), keyidx
-                                    )
-                                ).handle(
-                                    (noth, thr) -> {
-                                        if (thr == null) {
-                                            result.complete(null);
-                                        } else {
-                                            FileUtils.deleteQuietly(out.getParent().toFile());
-                                            result.completeExceptionally(thr);
-                                        }
-                                        return null;
-                                    }
-                                );
+                                    );
                             } catch (final IOException exc) {
                                 throw new ArtipieIOException(exc);
                             }
