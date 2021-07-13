@@ -72,6 +72,10 @@ SOFTWARE.
           <groupId>com.fasterxml.jackson.core</groupId>
           <artifactId>jackson-core</artifactId>
         </exclusion>
+        <exclusion>
+          <groupId>com.google.android</groupId>
+          <artifactId>annotations</artifactId>
+        </exclusion>
       </exclusions>
     </dependency>
     <dependency>
@@ -119,22 +123,35 @@ SOFTWARE.
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.awaitility</groupId>
-      <artifactId>awaitility</artifactId>
-      <version>4.1.0</version>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
       <version>30.1.1-jre</version>
       <scope>test</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>com.google.code.findbugs</groupId>
+          <artifactId>jsr305</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.google.errorprone</groupId>
+          <artifactId>error_prone_annotations</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
+    <!-- New versions of deps of used in adapter deps to get rid of overdue -->
+    <!--io.reactivex.rxjava2:rxjava-->
     <dependency>
-      <groupId>org.hobsoft.hamcrest</groupId>
-      <artifactId>hamcrest-compose</artifactId>
-      <version>0.4.0</version>
-      <scope>test</scope>
+      <groupId>org.mvel</groupId>
+      <artifactId>mvel2</artifactId>
+      <version>2.4.12.Final</version>
+      <scope>compile</scope>
+    </dependency>
+    <!--software.amazon.awssdk:netty-nio-client-->
+    <dependency>
+      <groupId>com.typesafe.netty</groupId>
+      <artifactId>netty-reactive-streams-http</artifactId>
+      <version>2.0.5</version>
+      <scope>runtime</scope>
     </dependency>
   </dependencies>
   <build>
